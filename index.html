@@ -111,10 +111,8 @@
         
         const Icons = {
             User: (p) => <Icon d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2 M12 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8" {...p} />,
-            // แก้ไข Icons.Monitor เพื่อให้ใส่ overflow-visible ได้
             Monitor: (p) => <svg xmlns="http://www.w3.org/2000/svg" width={p.size||24} height={p.size||24} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`${p.className} ${p.overflowVisible ? 'overflow-visible' : ''}`}><rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/></svg>,
             Bell: (p) => <Icon d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9 M10.3 21a1.94 1.94 0 0 0 3.4 0" {...p} />,
-            // FIXED: แก้ไข SyntaxError: Unterminated string constant.
             Check: (p) => <Icon d="M22 11.08V12a10 10 0 1 1-5.93-9.14 M22 4 12 14.01l-3-3" {...p} />,
             Clock: (p) => <Icon d="M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20 M12 6v6l4 2" {...p} />,
             Users: (p) => <Icon d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M9 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8 M22 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75" {...p} />,
@@ -126,7 +124,6 @@
             Settings: (p) => (
                 <img src="https://img2.pic.in.th/pic/settings3209826b30ab5f22.png" width={p.size||24} height={p.size||24} className={`object-contain ${p.className||''}`} alt="Settings" />
             ),
-            // FIXED: แก้ไข Unterminated string constant
             Trash: (p) => <Icon d="M3 6h18 M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" {...p} />,
             History: (p) => <Icon d="M3 3v5h5 M3.05 13A9 9 0 1 0 6 5.3L3 8" {...p} />,
             Skip: (p) => <svg xmlns="http://www.w3.org/2000/svg" width={p.size||24} height={p.size||24} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={p.className}><polygon points="5 4 15 12 5 20 5 4" /><line x1="19" x2="19" y1="5" y2="19" /></svg>,
@@ -143,7 +140,6 @@
             Sync: (p) => <Icon d="M21.5 2v6h-6 M21.34 5.5A10 10 0 1 0 22 12 M2.5 22v-6h6 M2.66 18.5A10 10 0 1 0 2 12" {...p} />,
             GoogleScript: (p) => <Icon d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71 M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1-71" {...p} />,
             Link2: (p) => <Icon d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71 M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" {...p} />,
-            // FIXED: เปลี่ยนไอคอน Time เป็น Clock (เดิมเป็น Time ที่มีขีด)
             Time: (p) => <Icon d="M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20 M12 6v6l4 2" {...p} />
         };
 
@@ -447,6 +443,8 @@
             const ADMIN_DURATION_KEY = 'admin_session_duration';
 
             const [viewMode, setViewMode] = useState('admin');
+            const [historyPrefixFilter, setHistoryPrefixFilter] = useState(''); // NEW: Filter for history view
+
             const [queues, setQueues] = useState([]);
             const [myQueueId, setMyQueueId] = useState(() => localStorage.getItem('my_queue_id'));
             
@@ -671,11 +669,10 @@
             };
 
             useEffect(() => {
-                if (viewMode === 'kiosk') {
-                    document.body.style.overflow = 'hidden';
-                } else {
+                if (viewMode === 'kiosk' || viewMode === 'history') { // Added 'history' to allow scroll if needed, but display handles it
                     document.body.style.overflow = 'auto';
-                    window.scrollTo(0, 0);
+                } else if (viewMode === 'display' || viewMode === 'qr-only') {
+                     document.body.style.overflow = 'auto'; // allow scroll generally to avoid issues, let internal containers handle lock
                 }
                 return () => {
                     document.body.style.overflow = 'auto';
@@ -947,11 +944,18 @@
                             } catch (authErr) { setErrorMsg("Auth Error: " + authErr.message); setConfigError(true); setLoading(false); }
                         }
                     });
+                    
+                    // --- Parse URL Parameters ---
                     const params = new URLSearchParams(window.location.search);
                     const mode = params.get('mode');
                     if (mode === 'kiosk') setViewMode('kiosk');
-                    if (mode === 'display') setViewMode('display');
-                    if (mode === 'qr-only') setViewMode('qr-only');
+                    else if (mode === 'display') setViewMode('display');
+                    else if (mode === 'qr-only') setViewMode('qr-only');
+                    else if (mode === 'history') {
+                        setViewMode('history');
+                        setHistoryPrefixFilter(params.get('prefix') || '');
+                    }
+                    
                     return () => unsubAuth();
                 } catch (err) { setErrorMsg(err.message); setConfigError(true); setLoading(false); }
             }, []);
@@ -1666,6 +1670,65 @@
                 window.open(finalKioskURL, '_blank'); 
             };
 
+            // NEW: History Table View logic
+            if (viewMode === 'history') {
+                let filteredHistory = queues;
+                if (historyPrefixFilter) {
+                    filteredHistory = queues.filter(q => q.number.toUpperCase().startsWith(historyPrefixFilter.toUpperCase()));
+                }
+                // เรียงจากใหม่ไปเก่า
+                filteredHistory = filteredHistory.sort((a, b) => b.createdAt - a.createdAt);
+
+                return (
+                    <div className="min-h-screen bg-slate-50 p-4 sm:p-6">
+                        <div className="max-w-7xl mx-auto">
+                            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+                                <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-3">
+                                    <Icons.Sheet className="text-indigo-600" size={28}/> 
+                                    ประวัติคิว {historyPrefixFilter ? `(เฉพาะโปรเจกต์ ${historyPrefixFilter})` : '(ทั้งหมด)'}
+                                </h1>
+                                <div className="text-sm text-slate-500 font-medium bg-white px-4 py-2 rounded-lg border border-slate-200">ทั้งหมด {filteredHistory.length} รายการ</div>
+                            </div>
+                            
+                            <div className="overflow-x-auto bg-white border border-slate-200 rounded-xl shadow-sm">
+                                <table className="min-w-full divide-y divide-slate-200">
+                                    <thead className="bg-slate-50">
+                                        <tr>
+                                            <th className="px-4 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">คิว</th>
+                                            {studentIdSystemEnabled && <th className="px-4 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">รหัส</th>}
+                                            <th className="px-4 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">ชื่อ</th>
+                                            <th className="px-4 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">สถานะ</th>
+                                            <th className="px-4 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">เวลาจอง</th>
+                                            <th className="px-4 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">เริ่มบริการ</th>
+                                            <th className="px-4 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">เสร็จสิ้น</th>
+                                            <th className="px-4 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">ใช้เวลา</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="bg-white divide-y divide-slate-100">
+                                        {filteredHistory.length > 0 ? filteredHistory.map((q) => (
+                                            <tr key={q.id} className="hover:bg-slate-50 transition-colors">
+                                                <td className="px-4 py-3 whitespace-nowrap text-sm font-black text-indigo-600">{q.number}</td>
+                                                {studentIdSystemEnabled && <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-slate-600">{q.studentId || '-'}</td>}
+                                                <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-slate-800">{q.name}</td>
+                                                <td className="px-4 py-3 whitespace-nowrap">{getStatusBadge(q.status)}</td>
+                                                <td className="px-4 py-3 whitespace-nowrap text-sm text-slate-500">{formatDateTime(q.createdAt)}</td>
+                                                <td className="px-4 py-3 whitespace-nowrap text-sm text-slate-500">{q.calledAt ? formatDateTime(q.calledAt) : '-'}</td>
+                                                <td className="px-4 py-3 whitespace-nowrap text-sm text-slate-500">{q.completedAt ? formatDateTime(q.completedAt) : '-'}</td>
+                                                <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-slate-600">{formatDuration(q.durationMs)}</td>
+                                            </tr>
+                                        )) : (
+                                            <tr>
+                                                <td colSpan={studentIdSystemEnabled ? 8 : 7} className="px-4 py-12 text-center text-slate-400">ไม่มีข้อมูลประวัติคิว</td>
+                                            </tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                );
+            }
+
             const waitingQueues = queues.filter(q => q.status === 'waiting');
             const currentServing = queues.find(q => q.status === 'serving');
             const myQueue = queues.find(q => q.id === myQueueId);
@@ -1736,7 +1799,7 @@
 
                             <div className="bg-slate-100 p-4 rounded-xl inline-block mb-4">
                                 {isQrExpirationActiveAndFinite && qrCountdown === 0 ? (
-                                    <div className="w-48 h-48 sm:w-64 sm:h-64 flex flex-col items-center justify-center bg-slate-200/50 rounded-xl text-slate-500 animate-pulse">
+                                    <div className="w-48 h-48 sm:w-64 sm:h-64 flex flex-col items-center justify-center bg-slate-200/50 rounded-md mx-auto text-slate-500 animate-pulse">
                                         <Icons.Loader size={32} className="animate-spin mb-3"/>
                                         <span className="text-sm font-bold">กำลังอัปเดต QR Code...</span>
                                     </div>
@@ -2688,6 +2751,28 @@
                                         <input type="text" value={queuePrefix || ''} onChange={e => setQueuePrefix(e.target.value.toUpperCase())} className="w-full border border-slate-200 rounded-xl px-4 py-3 text-center text-xl font-bold uppercase focus:ring-2 focus:ring-indigo-500 outline-none transition-all bg-slate-50" maxLength={2} />
                                     </div>
                                     
+                                    {/* NEW: Link Generator for History Table */}
+                                    <div className="bg-indigo-50 rounded-2xl p-4 border border-indigo-100">
+                                        <h3 className="text-sm font-bold text-indigo-800 flex items-center gap-2 mb-2">
+                                            <Icons.Link2 size={18} className="text-indigo-500"/> ลิ้งก์ข้อมูลตาราง (อิงตาม Prefix นี้)
+                                        </h3>
+                                        <p className="text-[10px] text-indigo-600/80 mb-2">นำลิ้งก์นี้ไปแปะใน iFrame ของเว็บอื่น เพื่อแสดงตารางคิวเฉพาะโปรเจกต์ (เช่น {queuePrefix})</p>
+                                        <div className="flex gap-2">
+                                            <input 
+                                                type="text" 
+                                                readOnly 
+                                                value={`${window.location.origin}${window.location.pathname}?mode=history&prefix=${queuePrefix}`} 
+                                                className="flex-1 border border-indigo-200 rounded-lg px-2 py-1.5 text-xs outline-none bg-white text-slate-500" 
+                                            />
+                                            <button 
+                                                onClick={(e) => { e.preventDefault(); window.open(`${window.location.origin}${window.location.pathname}?mode=history&prefix=${queuePrefix}`, '_blank'); }}
+                                                className="flex-shrink-0 bg-indigo-600 text-white hover:bg-indigo-700 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors"
+                                            >
+                                                เปิดดู
+                                            </button>
+                                        </div>
+                                    </div>
+
                                     <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
                                         <h3 className="text-sm font-bold text-slate-700 flex items-center gap-3 mb-2">
                                             <Icons.Lock size={20} className="text-slate-400"/> ระยะเวลา Admin Session
