@@ -78,14 +78,13 @@
         // 1. ตั้งค่า FIREBASE Config
         // ==========================================
         const YOUR_FIREBASE_CONFIG = {
-            apiKey: "AIzaSyCujAW7tgjkY21bYkyf_WRw8zhxGQq4-YA",
-            authDomain: "smart-q-4cd19.firebaseapp.com",
-            databaseURL: "https://smart-q-4cd19-default-rtdb.asia-southeast1.firebasedatabase.app",
-            projectId: "smart-q-4cd19",
-            storageBucket: "smart-q-4cd19.firebasestorage.app",
-            messagingSenderId: "1005591269358",
-            appId: "1:1005591269358:web:7b92536d68531786a448ff",
-            measurementId: "G-BGLMS9RLES"
+            apiKey: "AIzaSyBsN1ACDYvJzoVc6mhtu9n-HNi1KDNFV24",
+            authDomain: "project-6337867036145290950.firebaseapp.com",
+            projectId: "project-6337867036145290950",
+            storageBucket: "project-6337867036145290950.firebasestorage.app",
+            messagingSenderId: "298203222498",
+            appId: "1:298203222498:web:b3ef416666666c748ba9bb",
+            measurementId: "G-1LJY6YJQBZ"
         };
 
         const initFirebase = () => {
@@ -351,9 +350,9 @@
          * @returns {string} Formatted duration string.
          */
         const formatDuration = (durationMs) => {
-            if (typeof durationMs !== 'number' || durationMs <= 0) return '--';
+            if (typeof durationMs !== 'number' || durationMs < 0) return '--';
             const totalSeconds = Math.floor(durationMs / 1000);
-            const hours = Math.floor((totalSeconds % 3600) / 60);
+            const hours = Math.floor(totalSeconds / 3600); // FIXED BUG: Used correct hour calculation
             const minutes = Math.floor((totalSeconds % 3600) / 60);
             const seconds = totalSeconds % 60;
             
