@@ -562,6 +562,9 @@
 
             const [countdown, setCountdown] = useState(""); 
             
+            // NEW: Google Sheet Link field for Settings
+            const [googleSheetLink, setGoogleSheetLink] = useState('');
+            
             const [etaMap, setEtaMap] = useState({}); // {queueId: seconds_remaining}
             const [adminSessionRemainingSeconds, setAdminSessionRemainingSeconds] = useState(0); 
             const [historySort, setHistorySort] = useState('booked_latest'); 
@@ -1004,6 +1007,9 @@
                         if (data.externalLinkEnabled !== undefined) setExternalLinkEnabled(data.externalLinkEnabled);
                         if (data.externalLinkMapping !== undefined) setExternalLinkMapping(data.externalLinkMapping);
                         if (data.externalLinkLabel !== undefined) setExternalLinkLabel(data.externalLinkLabel);
+                        
+                        // NEW: Load Google Sheet Link
+                        if (data.googleSheetLink !== undefined) setGoogleSheetLink(data.googleSheetLink);
                         
                         if (data.adminSessionDuration !== undefined) {
                             const duration = parseInt(data.adminSessionDuration) || 60;
@@ -1624,6 +1630,7 @@
                         externalLinkEnabled: externalLinkEnabled,
                         externalLinkMapping: externalLinkMapping,
                         externalLinkLabel: externalLinkLabel,
+                        googleSheetLink: googleSheetLink, // NEW
                         useGasForLink: true, 
                         gasWebAppUrl: gasWebAppUrl,
                         masterLinkC1: masterLinkC1,
@@ -1737,16 +1744,23 @@
                             </h2>
 
                             <div className="bg-slate-100 p-4 rounded-xl inline-block mb-4">
-                                <img 
-                                    src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qrCodeData)}`} 
-                                    alt="Queue QR Code" 
-                                    className="w-48 h-48 sm:w-64 sm:h-64" 
-                                    key={qrToken}
-                                />
+                                {isQrExpirationActiveAndFinite && qrCountdown === 0 ? (
+                                    <div className="w-48 h-48 sm:w-64 sm:h-64 flex flex-col items-center justify-center bg-slate-200/50 rounded-xl text-slate-500 animate-pulse">
+                                        <Icons.Loader size={32} className="animate-spin mb-3"/>
+                                        <span className="text-sm font-bold">กำลังอัปเดต QR Code...</span>
+                                    </div>
+                                ) : (
+                                    <img 
+                                        src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qrCodeData)}`} 
+                                        alt="Queue QR Code" 
+                                        className="w-48 h-48 sm:w-64 sm:h-64" 
+                                        key={qrToken}
+                                    />
+                                )}
                                 
                                 {isQrExpirationActiveAndFinite && (
-                                    <div className="text-center mt-3 text-lg font-semibold text-red-600">
-                                        เหลือเวลา {countdown || formatCountdown(qrCountdown)}
+                                    <div className={`text-center mt-3 text-lg font-semibold ${qrCountdown === 0 ? 'text-slate-400' : 'text-red-600'}`}>
+                                        {qrCountdown === 0 ? 'หมดเวลา' : `เหลือเวลา ${countdown || formatCountdown(qrCountdown)}`}
                                     </div>
                                 )}
                             </div>
@@ -2016,13 +2030,9 @@
                         {showMyHistory && (
                             <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
                                  <div className="bg-white rounded-2xl w-full max-w-sm relative shadow-2xl flex flex-col max-h-[80vh]">
-                                     <div className="p-4 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
-                                         <div className="flex flex-col flex-1 min-w-0">
-                                             <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2"><Icons.History size={20}/> ประวัติการจองของฉัน</h3>
-                                         </div>
-                                         <div className="flex gap-2 items-center justify-end flex-nowrap flex-shrink-0">
-                                             <button onClick={() => setShowMyHistory(false)} className="p-2 hover:bg-slate-100 rounded-full transition-colors flex-shrink-0"><Icons.Cross size={24}/></button>
-                                         </div>
+                                     <button onClick={() => setShowMyHistory(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 z-10 p-1"><Icons.Cross size={24}/></button>
+                                     <div className="p-5 border-b border-slate-100 pr-12">
+                                         <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2 truncate"><Icons.History size={20}/> ประวัติการจองของฉัน</h3>
                                      </div>
                                      <div className="p-4 overflow-y-auto flex-1">
                                          {(() => {
@@ -2278,15 +2288,22 @@
                                     <div className="absolute bottom-0 right-0 p-4 z-10"> 
                                         <div className="backdrop-blur-sm bg-white/85 rounded-xl shadow-2xl p-3 text-center border border-white/90">
                                             <div className="text-xs font-bold text-slate-800 mb-1">สแกนเพื่อจองคิว</div>
-                                            <img 
-                                                src={`https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(qrCodeData)}`} 
-                                                alt="Queue QR Code" 
-                                                className="w-24 h-24 sm:w-28 sm:h-28 rounded-md mx-auto" 
-                                                key={qrToken} 
-                                            />
+                                            {isQrExpirationActiveAndFinite && qrCountdown === 0 ? (
+                                                <div className="w-24 h-24 sm:w-28 sm:h-28 flex flex-col items-center justify-center bg-slate-200/50 rounded-md mx-auto text-slate-500 animate-pulse">
+                                                    <Icons.Loader size={24} className="animate-spin mb-1"/>
+                                                    <span className="text-[10px] font-bold">อัปเดต...</span>
+                                                </div>
+                                            ) : (
+                                                <img 
+                                                    src={`https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(qrCodeData)}`} 
+                                                    alt="Queue QR Code" 
+                                                    className="w-24 h-24 sm:w-28 sm:h-28 rounded-md mx-auto" 
+                                                    key={qrToken} 
+                                                />
+                                            )}
                                             {qrExpireEnabled && Number(qrExpireTime) > 0 && (
-                                                <div className="text-center mt-3 text-lg font-semibold text-red-600">
-                                                    เหลือเวลา {countdown || formatCountdown(qrCountdown)}
+                                                <div className={`text-center mt-2 text-sm font-semibold ${qrCountdown === 0 ? 'text-slate-400' : 'text-red-600'}`}>
+                                                    {qrCountdown === 0 ? 'หมดเวลา' : `เหลือ ${countdown || formatCountdown(qrCountdown)}`}
                                                 </div>
                                             )}
                                         </div>
@@ -2914,6 +2931,30 @@
                                             </div>
                                         )}
                                     </div>
+                                    
+                                    {/* NEW: Google Sheet Link field at the bottom */}
+                                    <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
+                                        <h3 className="text-sm font-bold text-slate-700 flex items-center gap-3 mb-4">
+                                            <Icons.Link2 size={20} className="text-slate-400"/> ลิ้งก์ Google Sheet
+                                        </h3>
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 mb-1 ml-1">URL ของ Google Sheet</label>
+                                            <input 
+                                                type="url" 
+                                                value={googleSheetLink || ''} 
+                                                onChange={e => setGoogleSheetLink(e.target.value)} 
+                                                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500" 
+                                                placeholder="https://docs.google.com/spreadsheets/d/..." 
+                                            />
+                                            <p className="text-[10px] text-slate-400 mt-1">ใช้สำหรับเก็บลิ้งก์หรืออ้างอิงข้อมูลเพิ่มเติม</p>
+                                            {googleSheetLink && (
+                                                <a href={googleSheetLink} target="_blank" rel="noopener noreferrer" className="mt-2 inline-block bg-white border border-slate-200 text-indigo-600 text-xs font-bold py-1.5 px-3 rounded-lg hover:bg-slate-50">
+                                                    เปิด Google Sheet
+                                                </a>
+                                            )}
+                                        </div>
+                                    </div>
+
                                 </div>
 
                                 <div className="p-6 border-t border-slate-100 bg-white flex gap-3 z-10 flex-shrink-0">
@@ -2926,12 +2967,12 @@
 
                     {showLinkDataModal && (
                         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-[110]">
-                            <div className="bg-white rounded-3xl w-full max-w-xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
-                                <div className="p-6 border-b border-slate-100 flex justify-between items-center relative">
+                            <div className="bg-white rounded-3xl w-full max-w-xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden relative">
+                                <button onClick={() => setShowLinkDataModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 z-10"><Icons.Cross size={24}/></button>
+                                <div className="p-6 border-b border-slate-100 pr-12">
                                     <h2 className="font-bold text-xl text-slate-800 flex items-center gap-2">
-                                        <Icons.Sheet size={24} className="text-indigo-600"/> ข้อมูลลิ้งค์จาก Google Sheet (A-B)
+                                        <Icons.Sheet size={24} className="text-indigo-600"/> ข้อมูลลิ้งค์จาก Sheet
                                     </h2>
-                                    <button onClick={() => setShowLinkDataModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"><Icons.Cross size={24}/></button>
                                 </div>
                                 
                                 <div className="flex-1 overflow-y-auto p-6">
@@ -2979,36 +3020,33 @@
 
                     {showHistory && (
                         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-                            <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl animate-fade-in h-[80vh] flex flex-col">
+                            <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl animate-fade-in h-[80vh] flex flex-col relative">
+                                <button onClick={() => setShowHistory(null)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-2 hover:bg-slate-100 rounded-full transition-colors z-10"><Icons.Cross size={24}/></button>
                                 
-                                <div className="p-4 sm:p-6 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
-                                    <div className="flex flex-col flex-1 min-w-0">
+                                <div className="p-4 sm:p-6 border-b border-slate-100 flex flex-col gap-3 pr-14">
+                                    <div className="flex flex-col min-w-0">
                                         <div className="flex items-center gap-2">
                                             <h2 className="font-bold text-xl flex items-center gap-2">
                                                 <Icons.History/> 
                                                 {showHistory === 'all' ? 'ประวัติทั้งหมด' : (showHistory === 'completed' ? 'รายการเสร็จสิ้น' : (showHistory === 'cancelled' ? 'รายการยกเลิก' : 'กำลังรอ'))}
                                             </h2>
                                         </div>
-                                        <span className="text-sm text-slate-500 font-medium ml-1 block">({historyList.length} รายการ)</span>
+                                        <span className="text-sm text-slate-500 font-medium ml-8 block">({historyList.length} รายการ)</span>
                                     </div>
                                     
-                                    <div className="flex gap-2 items-center justify-end flex-nowrap flex-shrink-0 w-full sm:w-auto mt-2 sm:mt-0">
-                                        {showHistory === 'all' && (
-                                            <button onClick={handleExportExcel} className="text-xs text-green-600 hover:text-green-800 bg-green-50 hover:bg-green-100 border border-green-200 px-3 py-1.5 rounded-lg flex items-center gap-1 transition-colors font-bold flex-shrink-0">
+                                    {showHistory === 'all' && (
+                                        <div className="flex gap-2 items-center flex-wrap">
+                                            <button onClick={handleExportExcel} className="text-xs text-green-600 hover:text-green-800 bg-green-50 hover:bg-green-100 border border-green-200 px-3 py-1.5 rounded-lg flex items-center gap-1 transition-colors font-bold">
                                                 <Icons.Sheet size={12} className="flex-shrink-0"/> ดาวน์โหลด Excel
                                             </button>
-                                        )}
-                                        {showHistory === 'all' && (
-                                            <button onClick={() => setShowClearPopup(true)} className="text-xs text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 px-3 py-1.5 rounded-lg flex items-center gap-1 transition-colors font-bold flex-shrink-0">
+                                            <button onClick={() => setShowClearPopup(true)} className="text-xs text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 px-3 py-1.5 rounded-lg flex items-center gap-1 transition-colors font-bold">
                                                 <Icons.Trash size={12} className="flex-shrink-0"/> ล้างข้อมูล
                                             </button>
-                                        )}
-                                        <button onClick={() => setShowHistory(null)} className="p-2 hover:bg-slate-100 rounded-full transition-colors flex-shrink-0"><Icons.Cross size={24}/></button>
-                                    </div>
-
+                                        </div>
+                                    )}
                                 </div>
                                 
-                                <div className="px-4 sm:px-6 flex-shrink-0 pt-1 pb-3">
+                                <div className="px-4 sm:px-6 flex-shrink-0 pt-3 pb-3">
                                     <select 
                                         value={historySort}
                                         onChange={(e) => setHistorySort(e.target.value)}
