@@ -686,7 +686,7 @@
             };
 
             useEffect(() => {
-                if (viewMode === 'kiosk' || viewMode === 'history') { // Added 'history' to allow scroll if needed, but display handles it
+                if (viewMode === 'kiosk' || viewMode === 'history' || viewMode === 'raw') { // Added 'raw'
                     document.body.style.overflow = 'auto';
                 } else if (viewMode === 'display' || viewMode === 'qr-only') {
                      document.body.style.overflow = 'auto'; // allow scroll generally to avoid issues, let internal containers handle lock
@@ -970,6 +970,10 @@
                     else if (mode === 'qr-only') setViewMode('qr-only');
                     else if (mode === 'history') {
                         setViewMode('history');
+                        setHistoryPrefixFilter(params.get('prefix') || '');
+                    }
+                    else if (mode === 'raw') {
+                        setViewMode('raw');
                         setHistoryPrefixFilter(params.get('prefix') || '');
                     }
                     
@@ -1687,11 +1691,41 @@
                 window.open(finalKioskURL, '_blank'); 
             };
 
-            // NEW: History Table View logic
+            // NEW: API Data formatting (Raw mode)
+            if (viewMode === 'raw') {
+                let filteredHistory = queues;
+                if (historyPrefixFilter) {
+                    filteredHistory = queues.filter(q => {
+                        if(!q.number || !q.number.includes('-')) return false;
+                        const pfx = q.number.split('-')[0].toUpperCase();
+                        return pfx === historyPrefixFilter.toUpperCase();
+                    });
+                }
+                filteredHistory = filteredHistory.sort((a, b) => b.createdAt - a.createdAt);
+
+                const apiData = filteredHistory.map(q => ({
+                    number: q.number,
+                    studentId: q.studentId || '',
+                    name: q.name,
+                    status: q.status,
+                    createdAt: q.createdAt,
+                    calledAt: q.calledAt || null,
+                    completedAt: q.completedAt || null,
+                    durationMs: q.durationMs || 0,
+                    note: q.note || ''
+                }));
+
+                return (
+                    <pre style={{ wordWrap: 'break-word', whiteSpace: 'pre-wrap', padding: '10px', margin: 0, fontFamily: 'monospace' }}>
+                        {JSON.stringify(apiData, null, 2)}
+                    </pre>
+                );
+            }
+
+            // History Table View logic
             if (viewMode === 'history') {
                 let filteredHistory = queues;
                 if (historyPrefixFilter) {
-                    // Update check exact prefix matches robustly instead of startsWith
                     filteredHistory = queues.filter(q => {
                         if(!q.number || !q.number.includes('-')) return false;
                         const pfx = q.number.split('-')[0].toUpperCase();
@@ -1709,7 +1743,16 @@
                                     <Icons.Sheet className="text-indigo-600" size={28}/> 
                                     ประวัติคิว {historyPrefixFilter ? `(เฉพาะโปรเจกต์ ${historyPrefixFilter})` : '(ทั้งหมด)'}
                                 </h1>
-                                <div className="text-sm text-slate-500 font-medium bg-white px-4 py-2 rounded-lg border border-slate-200">ทั้งหมด {filteredHistory.length} รายการ</div>
+                                <div className="flex items-center gap-2">
+                                    <button 
+                                        onClick={(e) => { e.preventDefault(); window.open(`${window.location.origin}${window.location.pathname}?mode=raw&prefix=${historyPrefixFilter}`, '_blank'); }}
+                                        className="text-xs bg-indigo-50 text-indigo-600 hover:bg-indigo-100 border border-indigo-200 px-3 py-2 rounded-lg flex items-center gap-1 transition-colors font-bold shadow-sm"
+                                        title="สำหรับให้นักพัฒนา หรือเว็บอื่นดึงไปใช้งาน"
+                                    >
+                                        <Icons.Link2 size={16}/> ข้อมูล API (JSON)
+                                    </button>
+                                    <div className="text-sm text-slate-500 font-medium bg-white px-4 py-2 rounded-lg border border-slate-200 shadow-sm">ทั้งหมด {filteredHistory.length} รายการ</div>
+                                </div>
                             </div>
                             
                             <div className="overflow-x-auto bg-white border border-slate-200 rounded-xl shadow-sm">
