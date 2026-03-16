@@ -1767,6 +1767,23 @@
             if (viewMode === 'kiosk') {
                 const myEtaSeconds = aiQueueTimeEnabled && myQueue ? etaMap[myQueue.id] : null;
 
+                // --- Verify Token Validity for Rendering Form ---
+                const params = new URLSearchParams(window.location.search);
+                const kioskToken = params.get('queue_token');
+                let isKioskTokenValid = true;
+                let tokenErrorMessage = "";
+
+                if (displayBookingQrEnabled && (!myQueue || myQueue.status === 'cancelled')) {
+                    if (!kioskToken || kioskToken !== qrToken) {
+                        isKioskTokenValid = false;
+                        tokenErrorMessage = "ลิงก์ หรือ QR Code ไม่ถูกต้อง";
+                    } else if (qrExpireEnabled && qrExpireTime > 0 && qrTokenExpiry && Date.now() > qrTokenExpiry) {
+                        isKioskTokenValid = false;
+                        tokenErrorMessage = "ลิงก์ หรือ QR Code หมดอายุแล้ว";
+                    }
+                }
+                // ----------------------------------------------
+
                 return (
                     <div className="h-[100dvh] w-screen bg-slate-100 flex flex-col overflow-hidden fixed inset-0">
                         <Toast message={toast.message} type={toast.type} show={toast.show} />
@@ -1800,53 +1817,68 @@
                                 </div>
                                 <div className="p-6 flex-1 overflow-y-auto flex flex-col justify-center">
                                     {serviceOpen ? (
-                                        <form onSubmit={handleBookQueue} className="space-y-4">
-                                            {studentIdSystemEnabled && (
+                                        isKioskTokenValid ? (
+                                            <form onSubmit={handleBookQueue} className="space-y-4">
+                                                {studentIdSystemEnabled && (
+                                                    <div>
+                                                        <label className="block text-sm font-medium text-slate-700 mb-1">รหัสนักศึกษา</label>
+                                                        <input 
+                                                            required 
+                                                            autoFocus 
+                                                            type="text" 
+                                                            value={studentId} 
+                                                            onChange={e => setStudentId(e.target.value)} 
+                                                            className="w-full px-4 py-3 text-lg border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all" 
+                                                            placeholder="รหัสนักศึกษา" 
+                                                            disabled={isSubmitting} 
+                                                        />
+                                                    </div>
+                                                )}
                                                 <div>
-                                                    <label className="block text-sm font-medium text-slate-700 mb-1">รหัสนักศึกษา</label>
+                                                    <label className="block text-sm font-medium text-slate-700 mb-1">{studentIdSystemEnabled ? 'ชื่อเล่น' : 'ชื่อของคุณ'}</label>
                                                     <input 
                                                         required 
-                                                        autoFocus 
+                                                        autoFocus={!studentIdSystemEnabled}
                                                         type="text" 
-                                                        value={studentId} 
-                                                        onChange={e => setStudentId(e.target.value)} 
+                                                        value={customerName} 
+                                                        onChange={e => setCustomerName(e.target.value)} 
                                                         className="w-full px-4 py-3 text-lg border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all" 
-                                                        placeholder="รหัสนักศึกษา" 
+                                                        placeholder={studentIdSystemEnabled ? "เช่น สมชาย" : "เช่น คุณสมชาย"} 
                                                         disabled={isSubmitting} 
                                                     />
                                                 </div>
-                                            )}
-                                            <div>
-                                                <label className="block text-sm font-medium text-slate-700 mb-1">{studentIdSystemEnabled ? 'ชื่อเล่น' : 'ชื่อของคุณ'}</label>
-                                                <input 
-                                                    required 
-                                                    autoFocus={!studentIdSystemEnabled}
-                                                    type="text" 
-                                                    value={customerName} 
-                                                    onChange={e => setCustomerName(e.target.value)} 
-                                                    className="w-full px-4 py-3 text-lg border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all" 
-                                                    placeholder={studentIdSystemEnabled ? "เช่น สมชาย" : "เช่น คุณสมชาย"} 
-                                                    disabled={isSubmitting} 
-                                                />
-                                            </div>
-                                            <button type="submit" disabled={isSubmitting} className={`w-full text-white font-bold py-4 rounded-xl text-lg shadow-lg shadow-indigo-200 transition-all flex items-center justify-center gap-2 mt-2 ${isSubmitting ? 'bg-indigo-400' : 'bg-indigo-600 hover:bg-indigo-700 active:scale-95'}`}>
-                                                {isSubmitting ? <><Icons.Loader size={24}/> กำลังบันทึก...</> : 'รับบัตรคิว'}
-                                            </button>
-                                            <div className="text-center text-slate-400 text-sm mt-4">รออยู่ <span className="text-indigo-600 font-bold">{queues.filter(q => q.status === 'waiting').length}</span> คิว</div>
-                                            
-                                            {aiQueueTimeEnabled && waitingQueues.length > 0 && etaMap[waitingQueues[0].id] !== undefined && (
-                                                <div className="text-center text-sm text-green-600 font-bold bg-green-50 p-3 rounded-lg border border-green-100 animate-fade-in mt-2">
-                                                    <Icons.Time size={16} className="inline-block mr-1"/>
-                                                    คาดว่าคิวถัดไปจะถึงใน: {formatSecondsToMinutes(etaMap[waitingQueues[0].id])}
-                                                </div>
-                                            )}
-                                            
-                                            {historyEnabled && (
-                                                <button type="button" onClick={() => setShowMyHistory(true)} className="w-full flex items-center justify-center gap-2 text-slate-500 hover:text-indigo-600 mt-4 text-sm font-bold transition-colors">
-                                                    <Icons.History size={16}/> ประวัติการจองของฉัน
+                                                <button type="submit" disabled={isSubmitting} className={`w-full text-white font-bold py-4 rounded-xl text-lg shadow-lg shadow-indigo-200 transition-all flex items-center justify-center gap-2 mt-2 ${isSubmitting ? 'bg-indigo-400' : 'bg-indigo-600 hover:bg-indigo-700 active:scale-95'}`}>
+                                                    {isSubmitting ? <><Icons.Loader size={24}/> กำลังบันทึก...</> : 'รับบัตรคิว'}
                                                 </button>
-                                            )}
-                                        </form>
+                                                <div className="text-center text-slate-400 text-sm mt-4">รออยู่ <span className="text-indigo-600 font-bold">{queues.filter(q => q.status === 'waiting').length}</span> คิว</div>
+                                                
+                                                {aiQueueTimeEnabled && waitingQueues.length > 0 && etaMap[waitingQueues[0].id] !== undefined && (
+                                                    <div className="text-center text-sm text-green-600 font-bold bg-green-50 p-3 rounded-lg border border-green-100 animate-fade-in mt-2">
+                                                        <Icons.Time size={16} className="inline-block mr-1"/>
+                                                        คาดว่าคิวถัดไปจะถึงใน: {formatSecondsToMinutes(etaMap[waitingQueues[0].id])}
+                                                    </div>
+                                                )}
+                                                
+                                                {historyEnabled && (
+                                                    <button type="button" onClick={() => setShowMyHistory(true)} className="w-full flex items-center justify-center gap-2 text-slate-500 hover:text-indigo-600 mt-4 text-sm font-bold transition-colors">
+                                                        <Icons.History size={16}/> ประวัติการจองของฉัน
+                                                    </button>
+                                                )}
+                                            </form>
+                                        ) : (
+                                            <div className="flex flex-col items-center justify-center text-center space-y-4 py-8">
+                                                <div className="w-20 h-20 bg-amber-100 rounded-full flex items-center justify-center text-amber-500 mb-2">
+                                                    <Icons.Time size={40} />
+                                                </div>
+                                                <h3 className="text-xl font-bold text-slate-800">เซสชันหมดอายุ</h3>
+                                                <p className="text-slate-500">{tokenErrorMessage}<br/>กรุณาสแกน QR Code ใหม่อีกครั้งที่หน้าจุดบริการ</p>
+                                                {historyEnabled && (
+                                                    <button type="button" onClick={() => setShowMyHistory(true)} className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-3 rounded-xl transition-all flex items-center justify-center gap-2 mt-4">
+                                                        <Icons.History size={20}/> ดูประวัติการจองของฉัน
+                                                    </button>
+                                                )}
+                                            </div>
+                                        )
                                     ) : (
                                         <div className="flex flex-col items-center justify-center h-full text-center space-y-6 py-10">
                                             <div className="w-24 h-24 bg-red-100 rounded-full flex items-center justify-center text-red-500 animate-pulse">
