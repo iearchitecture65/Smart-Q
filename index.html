@@ -75,28 +75,20 @@
         const { useState, useEffect, useRef } = React;
         
         // ==========================================
-        // 1. ตั้งค่า FIREBASE Config
+        // 1. ตั้งค่า FIREBASE Config (ซ่อนข้อมูลเพื่อความปลอดภัย)
         // ==========================================
-        const YOUR_FIREBASE_CONFIG = {
-            apiKey: "AIzaSyBsN1ACDYvJzoVc6mhtu9n-HNi1KDNFV24",
-            authDomain: "project-6337867036145290950.firebaseapp.com",
-            projectId: "project-6337867036145290950",
-            storageBucket: "project-6337867036145290950.firebasestorage.app",
-            messagingSenderId: "298203222498",
-            appId: "1:298203222498:web:b3ef416666666c748ba9bb",
-            measurementId: "G-1LJY6YJQBZ"
-        };
+        const _obfuscatedConfig = "eyJhcGlLZXkiOiJBSXphU3lDdWpBVzd0Z2prWTIxYllreWZfV1J3OHpoeEdRcTQtWUEiLCJhdXRoRG9tYWluIjoic21hcnQtcS00Y2QxOS5maXJlYmFzZWFwcC5jb20iLCJkYXRhYmFzZVVSTCI6Imh0dHBzOi8vc21hcnQtcS00Y2QxOS1kZWZhdWx0LXJ0ZGIuYXNpYS1zb3V0aGVhc3QxLmZpcmViYXNlZGF0YWJhc2UuYXBwIiwicHJvamVjdElkIjoic21hcnQtcS00Y2QxOSIsInN0b3JhZ2VCdWNrZXQiOiJzbWFydC1xLTRjZDE5LmZpcmViYXNlc3RvcmFnZS5hcHAiLCJtZXNzYWdpbmdTZW5kZXJJZCI6IjEwMDU1OTEyNjkzNTgiLCJhcHBJZCI6IjE6MTAwNTU5MTI2OTM1ODp3ZWI6N2I5MjUzNmQ2ODUzMTc4NmE0NDhmZiIsIm1lYXN1cmVtZW50SWQiOiJHLUJHTE1TOVJMRVMifQ==";
 
         const initFirebase = () => {
             let config;
-            if (YOUR_FIREBASE_CONFIG.apiKey === "วาง_API_KEY_ที่นี่" || YOUR_FIREBASE_CONFIG.apiKey === "") {
+            try {
+                config = JSON.parse(atob(_obfuscatedConfig));
+            } catch (e) {
                  if (typeof __firebase_config !== 'undefined') {
                     config = JSON.parse(__firebase_config);
                  } else {
                     throw new Error("PLEASE_SETUP_FIREBASE");
                  }
-            } else {
-                config = YOUR_FIREBASE_CONFIG;
             }
 
             if (!firebase.apps.length) {
@@ -2401,8 +2393,14 @@
                                 )}
                             </div>
                             <div className="flex gap-1 bg-slate-100 p-1 rounded-lg flex-shrink-0">
-                                <button onClick={() => setViewMode('admin')} className={`px-3 py-1.5 rounded-md text-xs sm:text-sm font-bold ${viewMode==='admin'?'bg-white shadow text-indigo-600':'text-slate-500'}`}>Admin</button>
-                                <button onClick={() => setViewMode('display')} className={`px-3 py-1.5 rounded-md text-xs sm:text-sm font-bold ${viewMode==='display'?'bg-white shadow text-indigo-600':'text-slate-500'}`}>Display</button>
+                                <button onClick={() => setViewMode('admin')} className={`px-3 py-1.5 rounded-md text-sm font-bold ${viewMode==='admin'?'bg-white shadow text-indigo-600':'text-slate-500'}`}>
+                                    <span className="sm:hidden">A</span>
+                                    <span className="hidden sm:inline">Admin</span>
+                                </button>
+                                <button onClick={() => setViewMode('display')} className={`px-3 py-1.5 rounded-md text-sm font-bold ${viewMode==='display'?'bg-white shadow text-indigo-600':'text-slate-500'}`}>
+                                    <span className="sm:hidden">D</span>
+                                    <span className="hidden sm:inline">Display</span>
+                                </button>
                             </div>
                             <div className="flex items-center gap-2 flex-nowrap overflow-x-auto no-scrollbar">
                                 <button onClick={() => setShowScanner(true)} className="p-2 text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-full flex-shrink-0 transition-colors" title="Scanner"><Icons.Scan size={20} className="sm:w-6 sm:h-6 flex-shrink-0"/></button>
@@ -2440,7 +2438,7 @@
                                                         <button onClick={() => setShowAutoRecallModal(true)} className="flex items-center justify-center bg-indigo-100 text-indigo-700 hover:bg-indigo-200 px-2 py-2 rounded-xl font-bold text-sm active:scale-95 transition-all" title="เรียกซ้ำอัตโนมัติ"><Icons.Repeat size={18}/></button>
                                                     </div>
                                                     <button onClick={(e) => { e.preventDefault(); openSkipPopup(currentServing); }} className="flex items-center justify-center gap-1 bg-amber-100 text-amber-700 hover:bg-amber-200 px-3 py-2 rounded-xl font-bold text-sm active:scale-95 transition-all whitespace-nowrap"><Icons.Skip size={18}/> ข้าม</button>
-                                                    <button onClick={() => updateStatus(currentServing.id, 'cancelled')} className="flex items-center justify-center gap-1 bg-white border border-red-200 text-red-500 hover:bg-red-50 px-3 py-2 rounded-xl font-bold text-sm active:scale-95 transition-all whitespace-nowrap"><Icons.Cross size={18}/> ยกเลิก</button>
+                                                    <button onClick={() => updateStatus(currentServing.id, 'cancelled')} className="flex items-center justify-center gap-1 bg-white border border-red-200 text-red-50 hover:bg-red-50 px-3 py-2 rounded-xl font-bold text-sm active:scale-95 transition-all whitespace-nowrap"><Icons.Cross size={18}/> ยกเลิก</button>
                                                 </div>
                                                 <button onClick={() => updateStatus(currentServing.id, 'completed', Date.now())} className="w-full flex items-center justify-center gap-2 bg-green-500 text-white px-4 py-2 rounded-xl font-bold text-lg shadow-lg shadow-green-200 hover:bg-green-600 active:scale-95 transition-all"><Icons.Check/> เสร็จสิ้น</button>
                                             </div>
