@@ -686,7 +686,7 @@
             };
 
             useEffect(() => {
-                if (viewMode === 'kiosk' || viewMode === 'history' || viewMode === 'raw') { // Added 'raw'
+                if (viewMode === 'kiosk' || viewMode === 'history' || viewMode === 'raw') { 
                     document.body.style.overflow = 'auto';
                 } else if (viewMode === 'display' || viewMode === 'qr-only') {
                      document.body.style.overflow = 'auto'; // allow scroll generally to avoid issues, let internal containers handle lock
@@ -1714,11 +1714,91 @@
                     durationMs: q.durationMs || 0,
                     note: q.note || ''
                 }));
+                
+                const isCanvas = typeof __app_id !== 'undefined';
+                const firestoreUrl = isCanvas 
+                    ? `https://firestore.googleapis.com/v1/projects/smart-q-4cd19/databases/(default)/documents/artifacts/${__app_id}/public/data/queues`
+                    : `https://firestore.googleapis.com/v1/projects/smart-q-4cd19/databases/(default)/documents/queues`;
+
+                const gasCode = `function fetchQueueData() {
+  var url = "${firestoreUrl}";
+  var response = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
+  var json = JSON.parse(response.getContentText());
+  
+  var queues = [];
+  if (json.documents) {
+    json.documents.forEach(function(doc) {
+      var fields = doc.fields;
+      if (!fields) return;
+      
+      var number = fields.number ? fields.number.stringValue : "";
+      // กรองเฉพาะ Prefix ที่ต้องการ
+      if ("${historyPrefixFilter}" !== "" && !number.startsWith("${historyPrefixFilter}-")) return;
+
+      queues.push({
+        number: number,
+        name: fields.name ? fields.name.stringValue : "",
+        status: fields.status ? fields.status.stringValue : "",
+        studentId: fields.studentId ? fields.studentId.stringValue : "",
+        createdAt: fields.createdAt ? Number(fields.createdAt.integerValue || fields.createdAt.doubleValue || 0) : 0,
+        durationMs: fields.durationMs ? Number(fields.durationMs.integerValue || fields.durationMs.doubleValue || 0) : 0,
+        note: fields.note ? fields.note.stringValue : ""
+      });
+    });
+  }
+  
+  // เรียงลำดับจากใหม่ไปเก่า
+  queues.sort(function(a, b) { return b.createdAt - a.createdAt; });
+  
+  Logger.log(queues);
+  return queues;
+}`;
 
                 return (
-                    <pre style={{ wordWrap: 'break-word', whiteSpace: 'pre-wrap', padding: '10px', margin: 0, fontFamily: 'monospace' }}>
-                        {JSON.stringify(apiData, null, 2)}
-                    </pre>
+                    <div className="min-h-screen bg-slate-50 p-6 font-sans">
+                        <Toast message={toast.message} type={toast.type} show={toast.show} />
+                        <div className="max-w-4xl mx-auto">
+                            <div className="flex items-center justify-between mb-6">
+                                <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
+                                    <Icons.GoogleScript size={28} className="text-blue-600"/> API สำหรับ Google Apps Script
+                                </h2>
+                                <button onClick={() => window.close()} className="px-4 py-2 bg-slate-200 hover:bg-slate-300 rounded-lg text-sm font-bold text-slate-700 transition-colors">
+                                    ปิดหน้าต่าง
+                                </button>
+                            </div>
+
+                            <div className="bg-amber-50 border border-amber-200 text-amber-800 p-4 rounded-xl mb-6 shadow-sm">
+                                <strong>💡 คำแนะนำ:</strong> Google Apps Script (UrlFetchApp) ไม่สามารถดึงข้อมูล JSON จากหน้าเว็บนี้ได้โดยตรง เนื่องจากเป็นเว็บ React.js<br/>
+                                วิธีที่ถูกต้องคือ <strong>ดึงข้อมูลจาก Firebase (Firestore) โดยตรง</strong> ด้วยโค้ดด้านล่างนี้ครับ
+                            </div>
+                            
+                            <h3 className="font-bold text-lg mb-2 text-slate-700">1. คัดลอกโค้ดนี้ไปวางใน Google Apps Script (GAS)</h3>
+                            <div className="relative mb-8 shadow-lg rounded-xl overflow-hidden">
+                                <pre className="bg-slate-900 text-green-400 p-5 overflow-x-auto text-sm font-mono m-0">
+                                    {gasCode}
+                                </pre>
+                                <button 
+                                    onClick={() => { 
+                                        navigator.clipboard.writeText(gasCode).catch(() => {
+                                            const textArea = document.createElement("textarea");
+                                            textArea.value = gasCode;
+                                            document.body.appendChild(textArea);
+                                            textArea.select();
+                                            document.execCommand("copy");
+                                            document.body.removeChild(textArea);
+                                        });
+                                        showToastFn("คัดลอกโค้ด GAS เรียบร้อยแล้ว", "success"); 
+                                    }}
+                                    className="absolute top-3 right-3 bg-white/20 hover:bg-white/30 text-white px-4 py-1.5 rounded-lg text-xs font-bold transition-colors border border-white/30"
+                                >คัดลอกโค้ด</button>
+                            </div>
+
+                            <h3 className="font-bold text-lg mb-2 text-slate-700">2. ข้อมูล JSON ปัจจุบัน (สำหรับดูเป็นตัวอย่าง)</h3>
+                            <pre className="bg-white border border-slate-200 text-slate-700 p-5 rounded-xl overflow-x-auto text-sm font-mono shadow-sm">
+                                {JSON.stringify(apiData, null, 2)}
+                            </pre>
+                        </div>
+                    </div>
                 );
             }
 
