@@ -561,6 +561,9 @@
             const [adminSessionRemainingSeconds, setAdminSessionRemainingSeconds] = useState(0); 
             const [historySort, setHistorySort] = useState('booked_latest'); 
 
+            // Check if any modal is open to lock body scroll (Fix for iOS / Mobile)
+            const isAnyModalOpen = showSettings || showHistory || showMyHistory || showScanner || showScannedAction || showSkipPopup || showClearPopup || showConfirmPopup || showEditPopup || showAutoRecallModal || showCloseReasonModal || showExternalLinkError || showLinkDataModal || showMyQR || showRecallWait || selectedHistoryItem !== null;
+
             const skipInputRef = useRef(null);
             const clearInputRef = useRef(null);
             const editInputRef = useRef(null);
@@ -582,7 +585,7 @@
                 return crypto.randomUUID();
             };
 
-            // NEW: Extract all unique prefixes from queue history, sorted by latest usage
+            // Extract all unique prefixes from queue history, sorted by latest usage
             const getAvailablePrefixes = () => {
                 const prefixMap = {};
                 queues.forEach(q => {
@@ -637,7 +640,7 @@
                 }
             };
 
-            // NEW: Export History to Excel CSV
+            // Export History to Excel CSV
             const handleExportExcel = () => {
                 let csvContent = "data:text/csv;charset=utf-8,\uFEFF"; // BOM for Excel Thai chars
                 csvContent += "หมายเลขคิว,รหัสนักศึกษา,ชื่อ,สถานะ,เวลาจอง,เวลาเริ่มรับบริการ,เวลาเสร็จสิ้น,ใช้เวลา(วินาที)\n";
@@ -685,16 +688,21 @@
                 return url && typeof url === 'string' && url.includes('drive.google.com/drive');
             };
 
+            // Handle Body Scroll Locking for Popups
             useEffect(() => {
-                if (viewMode === 'kiosk' || viewMode === 'history' || viewMode === 'raw') { 
-                    document.body.style.overflow = 'auto';
-                } else if (viewMode === 'display' || viewMode === 'qr-only') {
-                     document.body.style.overflow = 'auto'; // allow scroll generally to avoid issues, let internal containers handle lock
+                if (isAnyModalOpen) {
+                    document.body.style.overflow = 'hidden';
+                } else {
+                    if (viewMode === 'kiosk' || viewMode === 'display' || viewMode === 'qr-only') {
+                        document.body.style.overflow = 'hidden';
+                    } else {
+                        document.body.style.overflow = 'auto';
+                    }
                 }
                 return () => {
                     document.body.style.overflow = 'auto';
                 };
-            }, [viewMode]);
+            }, [viewMode, isAnyModalOpen]);
 
             const getLinkForQueue = (mappingString, queueNumber) => {
                 if (!mappingString) return null;
@@ -1024,7 +1032,7 @@
                         if (data.externalLinkMapping !== undefined) setExternalLinkMapping(data.externalLinkMapping);
                         if (data.externalLinkLabel !== undefined) setExternalLinkLabel(data.externalLinkLabel);
                         
-                        // NEW: Load Google Sheet Link
+                        // Load Google Sheet Link
                         if (data.googleSheetLink !== undefined) setGoogleSheetLink(data.googleSheetLink);
                         
                         if (data.adminSessionDuration !== undefined) {
@@ -1646,7 +1654,7 @@
                         externalLinkEnabled: externalLinkEnabled,
                         externalLinkMapping: externalLinkMapping,
                         externalLinkLabel: externalLinkLabel,
-                        googleSheetLink: googleSheetLink, // NEW
+                        googleSheetLink: googleSheetLink, 
                         useGasForLink: true, 
                         gasWebAppUrl: gasWebAppUrl,
                         masterLinkC1: masterLinkC1,
@@ -1691,7 +1699,7 @@
                 window.open(finalKioskURL, '_blank'); 
             };
 
-            // NEW: API Data formatting (Raw mode)
+            // API Data formatting (Raw mode)
             if (viewMode === 'raw') {
                 let filteredHistory = queues;
                 if (historyPrefixFilter) {
@@ -2233,7 +2241,7 @@
                                      <div className="p-5 border-b border-slate-100 pr-12">
                                          <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2 truncate"><Icons.History size={20}/> ประวัติการจองของฉัน</h3>
                                      </div>
-                                     <div className="p-4 overflow-y-auto flex-1">
+                                     <div className="p-4 overflow-y-auto flex-1 overscroll-contain">
                                          {(() => {
                                              const localHistory = JSON.parse(localStorage.getItem('my_queue_history') || '[]');
                                              const displayHistory = localHistory.filter(h => {
@@ -2291,7 +2299,7 @@
                                     <div className="h-2 bg-gradient-to-r from-gray-400 to-gray-600 flex-shrink-0"></div>
                                     <button onClick={() => setSelectedHistoryItem(null)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 z-10"><Icons.Cross size={24}/></button>
                                     
-                                    <div className="p-6 text-center space-y-4 flex-1 overflow-y-auto flex flex-col justify-center">
+                                    <div className="p-6 text-center space-y-4 flex-1 overflow-y-auto flex flex-col justify-center overscroll-contain">
                                         <div className="flex-shrink-0"><span className="bg-slate-100 text-slate-500 px-3 py-1 rounded-full text-xs font-bold tracking-wide">HISTORY TICKET</span><h1 className="text-6xl sm:text-7xl font-black text-slate-800 mt-4 tracking-tighter">{selectedHistoryItem.number}</h1></div>
                                         
                                         <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 space-y-2 flex-shrink-0">
@@ -2440,7 +2448,7 @@
                                     <span className="text-md font-normal text-indigo-300">{waitingForDisplay.length} รายการ</span>
                                 </div>
                                 
-                                <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scroll"> 
+                                <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scroll overscroll-contain"> 
                                     {waitingForDisplay.length > 0 ? (
                                         waitingForDisplay.map((q, index) => {
                                             const isSkipped = q.skipCount > 0 || q.note;
@@ -2819,12 +2827,13 @@
 
                     {showSettings && (
                         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-                            <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl animate-fade-in flex flex-col max-h-[90vh] h-[90dvh] overflow-hidden ring-1 ring-black/5">
-                                <div className="p-6 border-b border-slate-100 bg-white z-10 flex-shrink-0">
+                            <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl animate-fade-in flex flex-col max-h-[90vh] h-[90dvh] overflow-hidden ring-1 ring-black/5 relative">
+                                <button onClick={() => setShowSettings(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 z-50 bg-white rounded-full p-1 shadow-sm border border-slate-100"><Icons.Cross size={24}/></button>
+                                <div className="p-6 border-b border-slate-100 bg-white z-10 flex-shrink-0 pr-12">
                                     <h2 className="font-bold text-lg text-slate-800">ตั้งค่าระบบ</h2>
                                 </div>
                                 
-                                <div className="p-6 overflow-y-auto custom-scroll space-y-6 bg-white flex-1">
+                                <div className="p-6 overflow-y-auto custom-scroll space-y-6 bg-white flex-1 overscroll-contain">
                                     <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
                                         <div className="flex items-center gap-3">
                                             <div className={`p-2.5 rounded-xl ${serviceOpen ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
@@ -3218,7 +3227,7 @@
                                     </h2>
                                 </div>
                                 
-                                <div className="flex-1 overflow-y-auto p-6">
+                                <div className="flex-1 overflow-y-auto p-6 overscroll-contain">
                                     <div className="text-sm text-slate-500 mb-4">
                                         ดึงข้อมูลล่าสุดเมื่อ: <span className={`font-bold ${lastGasSyncTime ? 'text-green-600' : 'text-red-500'}`}>{formatTime(lastGasSyncTime)}</span>
                                     </div>
@@ -3306,7 +3315,7 @@
                                     </select>
                                 </div>
                                 
-                                <div className="flex-1 overflow-y-auto p-4 space-y-2">
+                                <div className="flex-1 overflow-y-auto p-4 space-y-2 overscroll-contain">
                                     {historyList.length > 0 ? historyList.map(q => (
                                         <div key={q.id} className="p-4 bg-slate-50 rounded-xl border border-slate-200 shadow-sm hover:bg-slate-100 transition-colors">
                                             
