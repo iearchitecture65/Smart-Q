@@ -275,6 +275,7 @@
                     localStorage.setItem(ADMIN_EXPIRY_KEY, expiry.toString());
                     localStorage.setItem('admin_role', 'super');
                     localStorage.setItem('admin_user', 'Admin');
+                    localStorage.setItem('admin_pass', 'Admin123'); // Save pass for auto-kick check
                     onLogin('super', 'Admin', []); 
                 } else {
                     // Sub-Admin Check from Firestore
@@ -290,6 +291,7 @@
                             localStorage.setItem(ADMIN_EXPIRY_KEY, expiry.toString());
                             localStorage.setItem('admin_role', 'sub');
                             localStorage.setItem('admin_user', user);
+                            localStorage.setItem('admin_pass', pass); // Save pass for auto-kick check
                             localStorage.setItem('admin_allowed_links', JSON.stringify(found.allowedLinks || []));
                             
                             // Save detailed permissions to localStorage
@@ -299,7 +301,8 @@
                                 canSettings: found.canSettings ?? false,
                                 canScan: found.canScan ?? true,
                                 canDisplay: found.canDisplay ?? true,
-                                canQRView: found.canQRView ?? true
+                                canQRView: found.canQRView ?? true,
+                                canKiosk: found.canKiosk ?? true // NEW
                             };
                             localStorage.setItem('admin_perms', JSON.stringify(detailedPerms));
                             
@@ -545,6 +548,7 @@
             // --- NEW: Embedded Links & SubAdmins States ---
             const [embeddedLinks, setEmbeddedLinks] = useState([]);
             const [subAdmins, setSubAdmins] = useState([]);
+            const [editingSubAdmin, setEditingSubAdmin] = useState(null); // NEW: For editing sub admins
             
             // --- NEW: AI Time Estimation States ---
             const [aiQueueTimeEnabled, setAiQueueTimeEnabled] = useState(false);
@@ -633,7 +637,7 @@
             const [historySort, setHistorySort] = useState('booked_latest'); 
 
             // Check if any modal is open to lock body scroll (Fix for iOS / Mobile)
-            const isAnyModalOpen = showSettings || showHistory || showMyHistory || showScanner || showScannedAction || showSkipPopup || showClearPopup || showConfirmPopup || showEditPopup || showAutoRecallModal || showCloseReasonModal || showExternalLinkError || showLinkDataModal || showMyQR || showRecallWait || showSidebar || showManageLinksModal || showManageSubAdminsModal || selectedHistoryItem !== null;
+            const isAnyModalOpen = showSettings || showHistory || showMyHistory || showScanner || showScannedAction || showSkipPopup || showClearPopup || showConfirmPopup || showEditPopup || showAutoRecallModal || showCloseReasonModal || showExternalLinkError || showLinkDataModal || showMyQR || showRecallWait || showSidebar || showManageLinksModal || showManageSubAdminsModal || selectedHistoryItem !== null || editingSubAdmin !== null;
 
             const skipInputRef = useRef(null);
             const clearInputRef = useRef(null);
@@ -656,6 +660,7 @@
                 localStorage.removeItem(ADMIN_EXPIRY_KEY);
                 localStorage.removeItem('admin_role');
                 localStorage.removeItem('admin_user');
+                localStorage.removeItem('admin_pass'); // Clear pass too
                 localStorage.removeItem('admin_allowed_links');
                 localStorage.removeItem('admin_perms');
                 setAdminRole('');
@@ -976,7 +981,7 @@
 
                 const handleKeyDown = (e) => {
                     if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) return;
-                    if (showSkipPopup || showClearPopup || showConfirmPopup || showEditPopup || showScanner || showScannedAction || showRecallWait || showAutoRecallModal || showCloseReasonModal || showExternalLinkError || showManageLinksModal || showManageSubAdminsModal) return;
+                    if (showSkipPopup || showClearPopup || showConfirmPopup || showEditPopup || showScanner || showScannedAction || showRecallWait || showAutoRecallModal || showCloseReasonModal || showExternalLinkError || showManageLinksModal || showManageSubAdminsModal || editingSubAdmin !== null) return;
 
                     if (e.key === 'ArrowRight') {
                         if (!hasPermission('canCall')) return; // Restricted
@@ -999,7 +1004,7 @@
 
                 window.addEventListener('keydown', handleKeyDown);
                 return () => window.removeEventListener('keydown', handleKeyDown);
-            }, [viewMode, isAdminAuthenticated, queues, showSkipPopup, showClearPopup, showConfirmPopup, showEditPopup, showScanner, showScannedAction, showRecallWait, showAutoRecallModal, showCloseReasonModal, showExternalLinkError, showManageLinksModal, showManageSubAdminsModal, adminPerms, adminRole]);
+            }, [viewMode, isAdminAuthenticated, queues, showSkipPopup, showClearPopup, showConfirmPopup, showEditPopup, showScanner, showScannedAction, showRecallWait, showAutoRecallModal, showCloseReasonModal, showExternalLinkError, showManageLinksModal, showManageSubAdminsModal, editingSubAdmin, adminPerms, adminRole]);
 
             useEffect(() => {
                 let interval = null;
@@ -1050,6 +1055,39 @@
                     }
                 }
             }, [showScanner, queues]);
+
+            // --- NEW: Auto-Kick / Security Check Effect ---
+            useEffect(() => {
+                if (viewMode === 'admin' && adminRole === 'sub' && subAdmins.length > 0) {
+                    const myPass = localStorage.getItem('admin_pass');
+                    const myAccount = subAdmins.find(s => s.username === adminUser);
+
+                    if (!myAccount) {
+                        // Account was deleted
+                        handleLogout();
+                        setTimeout(() => alert("บัญชีของคุณถูกลบออกจากระบบ กรุณาติดต่อผู้ดูแลระบบหลัก"), 300);
+                    } else if (myAccount.password !== myPass) {
+                        // Password was changed
+                        handleLogout();
+                        setTimeout(() => alert("รหัสผ่าน หรือสิทธิ์ของคุณถูกเปลี่ยนแปลง กรุณาเข้าสู่ระบบใหม่"), 300);
+                    } else {
+                        // Update permissions dynamically if changed without password change
+                        const newPerms = {
+                            canCall: myAccount.canCall ?? true,
+                            canDelete: myAccount.canDelete ?? false,
+                            canSettings: myAccount.canSettings ?? false,
+                            canScan: myAccount.canScan ?? true,
+                            canDisplay: myAccount.canDisplay ?? true,
+                            canQRView: myAccount.canQRView ?? true,
+                            canKiosk: myAccount.canKiosk ?? true
+                        };
+                        localStorage.setItem('admin_perms', JSON.stringify(newPerms));
+                        localStorage.setItem('admin_allowed_links', JSON.stringify(myAccount.allowedLinks || []));
+                        setAdminPerms(newPerms);
+                        setAdminAllowedLinks(myAccount.allowedLinks || []);
+                    }
+                }
+            }, [subAdmins, adminRole, adminUser, viewMode]);
 
             useEffect(() => {
                 try {
@@ -2765,9 +2803,11 @@
                                             <Icons.QrCode size={20}/> จอแสดง QR Code
                                         </button>
                                     )}
-                                    <button onClick={openKioskLink} className="w-full text-left px-4 py-3 rounded-xl flex items-center gap-3 text-slate-600 hover:bg-slate-100 font-bold transition-colors">
-                                        <Icons.Link size={20}/> เปิดหน้าจองคิว (Kiosk Link)
-                                    </button>
+                                    {hasPermission('canKiosk') && (
+                                        <button onClick={openKioskLink} className="w-full text-left px-4 py-3 rounded-xl flex items-center gap-3 text-slate-600 hover:bg-slate-100 font-bold transition-colors">
+                                            <Icons.Link size={20}/> เปิดหน้าจองคิว (Kiosk Link)
+                                        </button>
+                                    )}
 
                                     {/* Embedded Links Section */}
                                     <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 mt-6 px-3 flex justify-between items-center">
@@ -2884,6 +2924,12 @@
                                             const password = e.target.subPass.value.trim();
                                             if(!username || !password) return;
                                             
+                                            // Check Duplicate
+                                            if (subAdmins.some(s => s.username === username)) {
+                                                alert("ชื่อผู้ใช้นี้มีอยู่ในระบบแล้ว กรุณาใช้ชื่ออื่น");
+                                                return;
+                                            }
+
                                             // Get checked links
                                             const checkedLinks = [];
                                             const linkCheckboxes = e.target.querySelectorAll('input[name="links"]:checked');
@@ -2900,7 +2946,8 @@
                                                 canSettings: e.target.canSettings.checked,
                                                 canScan: e.target.canScan.checked,
                                                 canDisplay: e.target.canDisplay.checked,
-                                                canQRView: e.target.canQRView.checked
+                                                canQRView: e.target.canQRView.checked,
+                                                canKiosk: e.target.canKiosk.checked
                                             };
                                             saveSubAdminsToFirestore([...subAdmins, newSub]);
                                             e.target.reset();
@@ -2926,6 +2973,7 @@
                                                     <label className="flex items-center gap-2 text-xs cursor-pointer"><input type="checkbox" name="canScan" defaultChecked className="rounded text-blue-600" /> ใช้งานเครื่องสแกน</label>
                                                     <label className="flex items-center gap-2 text-xs cursor-pointer"><input type="checkbox" name="canDisplay" defaultChecked className="rounded text-indigo-600" /> เปิดหน้า Display</label>
                                                     <label className="flex items-center gap-2 text-xs cursor-pointer"><input type="checkbox" name="canQRView" defaultChecked className="rounded text-indigo-600" /> เปิดหน้า QR-only</label>
+                                                    <label className="flex items-center gap-2 text-xs cursor-pointer"><input type="checkbox" name="canKiosk" defaultChecked className="rounded text-green-600" /> เปิดหน้า Kiosk</label>
                                                 </div>
                                             </div>
 
@@ -2953,6 +3001,10 @@
                                         <div className="space-y-3">
                                             {subAdmins.length > 0 ? subAdmins.map(sub => (
                                                 <div key={sub.id} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm relative group">
+                                                    
+                                                    {/* NEW: Edit Button */}
+                                                    <button onClick={() => setEditingSubAdmin(sub)} className="absolute top-3 right-10 text-amber-400 hover:text-amber-600 p-1 hover:bg-amber-50 rounded transition-colors"><Icons.Edit size={16}/></button>
+
                                                     <button onClick={() => {
                                                         if(confirm(`ต้องการลบผู้ใช้ ${sub.username} ใช่หรือไม่?`)) {
                                                             const newSubs = subAdmins.filter(s => s.id !== sub.id);
@@ -2970,6 +3022,7 @@
                                                         <span className={sub.canScan ? "text-blue-600" : "text-slate-300"}>• สแกน</span>
                                                         <span className={sub.canDisplay ? "text-indigo-600" : "text-slate-300"}>• Display</span>
                                                         <span className={sub.canQRView ? "text-indigo-600" : "text-slate-300"}>• QR-only</span>
+                                                        <span className={sub.canKiosk ?? true ? "text-green-600" : "text-slate-300"}>• Kiosk</span>
                                                     </div>
 
                                                     <div className="text-[10px] font-bold text-slate-400 mt-2 border-t border-slate-100 pt-2">สิทธิ์ระบบฝัง:</div>
@@ -2984,6 +3037,101 @@
                                         </div>
                                     </div>
                                     
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* NEW: Edit Sub-Admin Modal */}
+                    {editingSubAdmin && adminRole === 'super' && (
+                        <div className="fixed inset-0 bg-black/70 z-[150] flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in">
+                            <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl flex flex-col max-h-[90vh] overflow-hidden relative border-t-4 border-amber-500">
+                                <button onClick={() => setEditingSubAdmin(null)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 z-10"><Icons.Cross size={24}/></button>
+                                <div className="p-5 border-b border-slate-100 bg-amber-50">
+                                    <h2 className="font-bold text-xl text-amber-800 flex items-center gap-2"><Icons.Edit size={24} className="text-amber-600"/> แก้ไขข้อมูลแอดมินรอง</h2>
+                                </div>
+                                
+                                <div className="p-6 overflow-y-auto flex-1 custom-scroll">
+                                    <form onSubmit={(e) => {
+                                            e.preventDefault();
+                                            const username = e.target.subUser.value.trim();
+                                            const password = e.target.subPass.value.trim();
+                                            if(!username || !password) return;
+                                            
+                                            // Check Duplicate (excluding self)
+                                            if (subAdmins.some(s => s.username === username && s.id !== editingSubAdmin.id)) {
+                                                alert("ชื่อผู้ใช้นี้มีอยู่ในระบบแล้ว กรุณาใช้ชื่ออื่น");
+                                                return;
+                                            }
+
+                                            // Get checked links
+                                            const checkedLinks = [];
+                                            const linkCheckboxes = e.target.querySelectorAll('input[name="edit_links"]:checked');
+                                            linkCheckboxes.forEach(cb => checkedLinks.push(cb.value));
+
+                                            // Construct updated object
+                                            const updatedSub = { 
+                                                ...editingSubAdmin,
+                                                username, 
+                                                password, 
+                                                allowedLinks: checkedLinks,
+                                                canCall: e.target.edit_canCall.checked,
+                                                canDelete: e.target.edit_canDelete.checked,
+                                                canSettings: e.target.edit_canSettings.checked,
+                                                canScan: e.target.edit_canScan.checked,
+                                                canDisplay: e.target.edit_canDisplay.checked,
+                                                canQRView: e.target.edit_canQRView.checked,
+                                                canKiosk: e.target.edit_canKiosk.checked
+                                            };
+
+                                            const newSubs = subAdmins.map(s => s.id === editingSubAdmin.id ? updatedSub : s);
+                                            saveSubAdminsToFirestore(newSubs);
+                                            setEditingSubAdmin(null);
+                                        }} className="space-y-4">
+                                            
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <div>
+                                                    <label className="text-xs font-bold text-slate-500 mb-1 block">ชื่อผู้ใช้</label>
+                                                    <input required name="subUser" type="text" defaultValue={editingSubAdmin.username} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-amber-500 bg-slate-50" />
+                                                </div>
+                                                <div>
+                                                    <label className="text-xs font-bold text-slate-500 mb-1 block">รหัสผ่าน</label>
+                                                    <input required name="subPass" type="text" defaultValue={editingSubAdmin.password} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-amber-500 bg-slate-50" />
+                                                </div>
+                                            </div>
+                                            
+                                            <div className="pt-2 border-t border-slate-100">
+                                                <label className="text-xs font-bold text-slate-700 mb-2 block">กำหนดสิทธิ์การจัดการ (Permissions)</label>
+                                                <div className="grid grid-cols-2 gap-2 bg-slate-50 p-3 rounded-lg border border-slate-100">
+                                                    <label className="flex items-center gap-2 text-xs cursor-pointer"><input type="checkbox" name="edit_canCall" defaultChecked={editingSubAdmin.canCall ?? true} className="rounded text-amber-600 focus:ring-amber-500" /> เรียกคิว/ข้ามคิว</label>
+                                                    <label className="flex items-center gap-2 text-xs cursor-pointer"><input type="checkbox" name="edit_canDelete" defaultChecked={editingSubAdmin.canDelete ?? false} className="rounded text-red-600 focus:ring-red-500" /> ลบรายการ/ล้างคิว</label>
+                                                    <label className="flex items-center gap-2 text-xs cursor-pointer"><input type="checkbox" name="edit_canSettings" defaultChecked={editingSubAdmin.canSettings ?? false} className="rounded text-amber-600 focus:ring-amber-500" /> เข้าเมนูตั้งค่า</label>
+                                                    <label className="flex items-center gap-2 text-xs cursor-pointer"><input type="checkbox" name="edit_canScan" defaultChecked={editingSubAdmin.canScan ?? true} className="rounded text-blue-600 focus:ring-blue-500" /> ใช้งานเครื่องสแกน</label>
+                                                    <label className="flex items-center gap-2 text-xs cursor-pointer"><input type="checkbox" name="edit_canDisplay" defaultChecked={editingSubAdmin.canDisplay ?? true} className="rounded text-indigo-600 focus:ring-indigo-500" /> เปิดหน้า Display</label>
+                                                    <label className="flex items-center gap-2 text-xs cursor-pointer"><input type="checkbox" name="edit_canQRView" defaultChecked={editingSubAdmin.canQRView ?? true} className="rounded text-indigo-600 focus:ring-indigo-500" /> เปิดหน้า QR-only</label>
+                                                    <label className="flex items-center gap-2 text-xs cursor-pointer"><input type="checkbox" name="edit_canKiosk" defaultChecked={editingSubAdmin.canKiosk ?? true} className="rounded text-green-600 focus:ring-green-500" /> เปิดหน้า Kiosk</label>
+                                                </div>
+                                            </div>
+
+                                            <div className="pt-2 border-t border-slate-100">
+                                                <label className="text-xs font-bold text-slate-700 mb-2 block">กำหนดสิทธิ์การเข้าถึงระบบฝัง</label>
+                                                {embeddedLinks.length > 0 ? (
+                                                    <div className="space-y-2 max-h-32 overflow-y-auto custom-scroll p-2 bg-slate-50 border border-slate-200 rounded-lg">
+                                                        {embeddedLinks.map(link => (
+                                                            <label key={link.id} className="flex items-center gap-2 text-sm cursor-pointer hover:bg-slate-100 p-1 rounded">
+                                                                <input type="checkbox" name="edit_links" value={link.id} defaultChecked={(editingSubAdmin.allowedLinks || []).includes(link.id)} className="rounded text-amber-600 focus:ring-amber-500" />
+                                                                <span className="truncate">{link.name}</span>
+                                                            </label>
+                                                        ))}
+                                                    </div>
+                                                ) : <div className="text-xs text-red-500 italic">กรุณาเพิ่มระบบฝัง (Embedded Links) ก่อน</div>}
+                                            </div>
+                                            
+                                            <div className="flex gap-2 pt-4 border-t border-slate-100">
+                                                <button type="button" onClick={() => setEditingSubAdmin(null)} className="flex-1 py-2.5 text-slate-600 hover:bg-slate-100 rounded-lg font-bold text-sm transition-colors">ยกเลิก</button>
+                                                <button type="submit" className="flex-1 bg-amber-500 text-white py-2.5 rounded-lg font-bold hover:bg-amber-600 text-sm shadow-lg shadow-amber-100 transition-colors">บันทึกการแก้ไข</button>
+                                            </div>
+                                    </form>
                                 </div>
                             </div>
                         </div>
@@ -3688,231 +3836,61 @@
                                                 className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500" 
                                                 placeholder="https://docs.google.com/spreadsheets/d/..." 
                                             />
-                                            <p className="text-[10px] text-slate-400 mt-1">ใช้สำหรับเก็บลิ้งก์หรืออ้างอิงข้อมูลเพิ่มเติม</p>
-                                            {googleSheetLink && (
-                                                <a href={googleSheetLink} target="_blank" rel="noopener noreferrer" className="mt-2 inline-block bg-white border border-slate-200 text-indigo-600 text-xs font-bold py-1.5 px-3 rounded-lg hover:bg-slate-50">
-                                                    เปิด Google Sheet
-                                                </a>
-                                            )}
                                         </div>
                                     </div>
-
                                 </div>
-
-                                <div className="p-6 border-t border-slate-100 bg-white flex gap-3 z-10 flex-shrink-0">
-                                    <button onClick={() => setShowSettings(false)} className="flex-1 py-3 text-slate-500 hover:bg-slate-100 rounded-xl font-bold transition-colors text-sm">ยกเลิก</button>
-                                    <button onClick={handleSaveSettings} className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-bold shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition-all transform active:scale-95 text-sm">บันทึก</button>
+                                <div className="p-4 border-t border-slate-100 bg-slate-50 flex-shrink-0 flex gap-2">
+                                    <button onClick={() => setShowSettings(false)} className="flex-1 py-3 text-slate-600 font-bold hover:bg-slate-200 rounded-xl transition-colors">ยกเลิก</button>
+                                    <button onClick={handleSaveSettings} className="flex-1 py-3 bg-indigo-600 text-white font-bold rounded-xl shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition-all">บันทึกการตั้งค่า</button>
                                 </div>
                             </div>
                         </div>
                     )}
 
-                    {showLinkDataModal && (
-                        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-[150]">
-                            <div className="bg-white rounded-3xl w-full max-w-xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden relative">
-                                <button onClick={() => setShowLinkDataModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 z-10"><Icons.Cross size={24}/></button>
-                                <div className="p-6 border-b border-slate-100 pr-12">
-                                    <h2 className="font-bold text-xl text-slate-800 flex items-center gap-2">
-                                        <Icons.Sheet size={24} className="text-indigo-600"/> ข้อมูลลิ้งค์จาก Sheet
-                                    </h2>
-                                </div>
-                                
-                                <div className="flex-1 overflow-y-auto p-6 overscroll-contain">
-                                    <div className="text-sm text-slate-500 mb-4">
-                                        ดึงข้อมูลล่าสุดเมื่อ: <span className={`font-bold ${lastGasSyncTime ? 'text-green-600' : 'text-red-500'}`}>{formatTime(lastGasSyncTime)}</span>
-                                    </div>
-                                    {externalLinkMapping ? (
-                                        <table className="min-w-full divide-y divide-slate-200">
-                                            <thead>
-                                                <tr className="text-left text-xs font-bold text-slate-500 uppercase tracking-wider bg-slate-50">
-                                                    <th className="p-3 w-1/4">Queue Key (A)</th>
-                                                    <th className="p-3 w-3/4">Link (B)</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-slate-100 text-sm">
-                                                {externalLinkMapping.split('\n').map((line, index) => {
-                                                    const parts = line.split(',');
-                                                    const key = parts[0].trim();
-                                                    const link = parts.slice(1).join('').trim();
-                                                    
-                                                    if (!key) return null; 
-                                                    
-                                                    return (
-                                                        <tr key={index} className="hover:bg-indigo-50/50">
-                                                            <td className="p-3 font-mono font-bold text-slate-800 whitespace-nowrap">{key}</td>
-                                                            <td className="p-3 text-xs text-slate-600 truncate max-w-[200px] hover:overflow-visible hover:whitespace-normal">
-                                                                <a href={link.startsWith('http') ? link : `https://${link}`} target="_blank" className="text-blue-600 hover:underline">{link}</a>
-                                                            </td>
-                                                        </tr>
-                                                    );
-                                                })}
-                                            </tbody>
-                                        </table>
-                                    ) : (
-                                        <div className="text-center text-slate-400 py-10">ไม่พบข้อมูลลิ้งค์</div>
-                                    )}
-                                </div>
-                                <div className="p-4 border-t border-slate-100">
-                                    <button onClick={() => setShowLinkDataModal(false)} className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700">ปิด</button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-
-                    {showHistory && (
-                        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-                            <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl animate-fade-in h-[80vh] flex flex-col relative">
-                                <button onClick={() => setShowHistory(null)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-2 hover:bg-slate-100 rounded-full transition-colors z-10"><Icons.Cross size={24}/></button>
-                                
-                                <div className="p-4 sm:p-6 border-b border-slate-100 flex flex-col gap-3 pr-14">
-                                    <div className="flex flex-col min-w-0">
-                                        <div className="flex items-center gap-2">
-                                            <h2 className="font-bold text-xl flex items-center gap-2">
-                                                <Icons.History/> 
-                                                {showHistory === 'all' ? 'ประวัติทั้งหมด' : (showHistory === 'completed' ? 'รายการเสร็จสิ้น' : (showHistory === 'cancelled' ? 'รายการยกเลิก' : 'กำลังรอ'))}
-                                            </h2>
-                                        </div>
-                                        <span className="text-sm text-slate-500 font-medium ml-8 block">({historyList.length} รายการ)</span>
-                                    </div>
-                                    
-                                    {showHistory === 'all' && (
-                                        <div className="flex gap-2 items-center flex-wrap">
-                                            <button onClick={handleExportExcel} className="text-xs text-green-600 hover:text-green-800 bg-green-50 hover:bg-green-100 border border-green-200 px-3 py-1.5 rounded-lg flex items-center gap-1 transition-colors font-bold">
-                                                <Icons.Sheet size={12} className="flex-shrink-0"/> ดาวน์โหลด Excel
-                                            </button>
-                                            {hasPermission('canDelete') && (
-                                                <button onClick={() => setShowClearPopup(true)} className="text-xs text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 px-3 py-1.5 rounded-lg flex items-center gap-1 transition-colors font-bold">
-                                                    <Icons.Trash size={12} className="flex-shrink-0"/> ล้างข้อมูล
-                                                </button>
-                                            )}
-                                        </div>
-                                    )}
-                                </div>
-                                
-                                <div className="px-4 sm:px-6 flex-shrink-0 pt-3 pb-3">
-                                    <select 
-                                        value={historySort}
-                                        onChange={(e) => setHistorySort(e.target.value)}
-                                        className="w-full sm:w-44 border border-slate-300 rounded-lg px-2 py-1.5 text-xs font-medium text-slate-700 bg-white shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
-                                    >
-                                        <option value="booked_latest">จองคิว: ล่าสุด {"->"} เก่าสุด (ค่าพื้นฐาน)</option>
-                                        <option value="booked_oldest">จองคิว: เก่าสุด {"->"} ล่าสุด</option>
-                                        {(showHistory === 'all' || showHistory === 'completed') && (
-                                            <>
-                                                <option value="completed_latest">เสร็จสิ้น: ล่าสุด {"->"} เก่าสุด</option>
-                                                <option value="completed_oldest">เสร็จสิ้น: เก่าสุด {"->"} ล่าสุด</option>
-                                            </>
-                                        )}
-                                    </select>
-                                </div>
-                                
-                                <div className="flex-1 overflow-y-auto p-4 space-y-2 overscroll-contain">
-                                    {historyList.length > 0 ? historyList.map(q => (
-                                        <div key={q.id} className="p-4 bg-slate-50 rounded-xl border border-slate-200 shadow-sm hover:bg-slate-100 transition-colors">
-                                            
-                                            <div className="flex justify-between items-start mb-2">
-                                                <div className="flex flex-col">
-                                                    <div className="flex items-center gap-2">
-                                                        <div className="text-xl font-black text-indigo-600">{q.number}</div>
-                                                        {getStatusBadge(q.status)} 
-                                                    </div>
-                                                    <div className="font-medium text-slate-800 text-sm mt-0.5 truncate max-w-[calc(100vw-140px)] sm:max-w-xs">
-                                                        คุณ {q.name}
-                                                    </div>
-                                                    {studentIdSystemEnabled && q.studentId && (
-                                                        <div className="text-xs text-indigo-500 font-bold mt-0.5">
-                                                            รหัส: {q.studentId}
-                                                        </div>
-                                                    )}
-                                                </div>
-                                                
-                                                <div className="flex gap-2 flex-shrink-0">
-                                                    {(q.status === 'completed' || q.status === 'cancelled') && (
-                                                        <button 
-                                                            onClick={() => handleRecall(q.id)} 
-                                                            disabled={!hasPermission('canCall')}
-                                                            className={`p-1 rounded-full transition-colors ${hasPermission('canCall') ? 'text-indigo-600 hover:bg-indigo-100' : 'text-slate-200 cursor-not-allowed'}`}
-                                                            title="เรียกคิวอีกครั้ง"
-                                                        >
-                                                            <Icons.Repeat size={16}/>
-                                                        </button>
-                                                    )}
-                                                    <button onClick={() => setShowEditPopup({ queue: q })} className="text-slate-400 hover:text-indigo-600 p-1 rounded-full hover:bg-slate-200"><Icons.Edit size={16}/></button>
-                                                    {hasPermission('canDelete') && (
-                                                        <button onClick={() => setShowConfirmPopup({ id: q.id, type: 'delete' })} className="text-red-400 hover:text-red-600 p-1 rounded-full hover:bg-red-100"><Icons.Trash size={16}/></button>
-                                                    )}
-                                                </div>
-                                            </div>
-                                            
-                                            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs text-slate-600 mt-2 border-t border-slate-100 pt-2">
-                                                <div className="col-span-2 md:col-span-1">
-                                                    <div className="text-slate-400">จองคิว</div>
-                                                    <div className="font-medium">{formatDateTime(q.createdAt)}</div>
-                                                </div>
-                                                <div className="col-span-2 md:col-span-1">
-                                                    <div className="text-slate-400">เริ่มบริการ</div>
-                                                    <div className="font-medium">{q.calledAt ? formatDateTime(q.calledAt) : '--'}</div>
-                                                </div>
-                                                <div className="col-span-2 md:col-span-1">
-                                                    <div className="text-slate-400">เสร็จสิ้น</div>
-                                                    <div className="font-medium">{q.completedAt ? formatDateTime(q.completedAt) : '--'}</div>
-                                                </div>
-                                                <div className="col-span-2 md:col-span-1">
-                                                    <div className="text-slate-400">ใช้เวลา</div>
-                                                    <div className="font-bold text-indigo-600">{formatDuration(q.durationMs)}</div>
-                                                </div>
-                                            </div>
-                                            
-                                        </div>
-                                    )) : <div className="text-center text-slate-400 mt-10">ไม่มีข้อมูล</div>}
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
+                    {/* Clear Queues Modal */}
                     {showClearPopup && (
-                        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-[60]">
-                            <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl animate-fade-in border-t-4 border-red-500 relative">
-                                <button onClick={() => setShowClearPopup(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 z-10"><Icons.Cross size={24}/></button>
-                                <h2 className="font-bold text-xl mb-4 text-red-600 flex items-center gap-2"><Icons.Trash size={24}/> ยืนยันการล้างคิว</h2>
-                                <p className="text-sm text-slate-600 mb-4">การกระทำนี้ไม่สามารถกู้คืนได้ **ประวัติการจองของลูกค้าทั้งหมดจะหายไป** กรุณาใส่รหัสผ่านเพื่อยืนยัน</p>
-                                <label className="block text-sm font-medium text-slate-700 mb-2">รหัสผ่าน Admin</label>
+                        <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in">
+                            <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl relative border-t-4 border-red-500">
+                                <button onClick={() => setShowClearPopup(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"><Icons.Cross size={24}/></button>
+                                <h2 className="font-bold text-xl mb-4 text-red-600 flex items-center gap-2"><Icons.Trash size={24}/> ล้างคิวทั้งหมด</h2>
+                                <p className="text-slate-500 text-sm mb-4">การกระทำนี้จะลบคิวทั้งหมดในระบบและไม่สามารถกู้คืนได้</p>
                                 <input 
                                     ref={clearInputRef}
                                     type="password" 
                                     value={clearPassword} 
                                     onChange={e => setClearPassword(e.target.value)} 
                                     onKeyDown={e => { if (e.key === 'Enter') handleClearQueuesSubmit(); }}
-                                    className="w-full border border-slate-200 rounded-xl px-4 py-3 text-lg outline-none focus:ring-2 focus:ring-red-500 transition-all mb-4 text-center" 
-                                    placeholder="ใส่รหัสผ่าน" 
+                                    className="w-full border border-slate-200 rounded-xl px-4 py-3 text-lg outline-none focus:ring-2 focus:ring-red-500 transition-all mb-4" 
+                                    placeholder="รหัสผ่าน Admin" 
                                 />
                                 <div className="flex gap-2">
                                     <button onClick={() => setShowClearPopup(false)} className="flex-1 py-2 text-slate-500 hover:bg-slate-100 rounded-xl">ยกเลิก</button>
-                                    <button onClick={handleClearQueuesSubmit} className="flex-1 py-2 bg-red-600 text-white rounded-xl font-bold hover:bg-red-700">ลบทั้งหมด</button>
+                                    <button onClick={handleClearQueuesSubmit} className="flex-1 py-2 bg-red-600 text-white rounded-xl font-bold hover:bg-red-700 shadow-md">ยืนยันล้างคิว</button>
                                 </div>
                             </div>
                         </div>
                     )}
 
+                    {/* Delete Confirm Modal */}
                     {showConfirmPopup && (
-                        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-[60]">
-                            <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl animate-fade-in relative">
-                                <button onClick={() => setShowConfirmPopup(null)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 z-10"><Icons.Cross size={24}/></button>
-                                <h2 className="font-bold text-xl mb-4 text-slate-800">ยืนยันการลบ</h2>
-                                <p className="text-slate-600 mb-6">ต้องการลบรายการนี้ใช่หรือไม่?</p>
+                        <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in">
+                            <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl relative border-t-4 border-red-500">
+                                <button onClick={() => setShowConfirmPopup(null)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"><Icons.Cross size={24}/></button>
+                                <h2 className="font-bold text-xl mb-4 text-red-600 flex items-center gap-2"><Icons.Alert size={24}/> ยืนยันการลบ</h2>
+                                <p className="text-slate-600 mb-6">คุณต้องการลบคิว <span className="font-bold text-indigo-600">{showConfirmPopup.number}</span> ใช่หรือไม่?</p>
                                 <div className="flex gap-2">
-                                    <button onClick={() => setShowConfirmPopup(null)} className="flex-1 py-2 text-slate-500 hover:bg-slate-100 rounded-xl">ยกเลิก</button>
-                                    <button onClick={handleDeleteConfirm} className="flex-1 py-2 bg-red-600 text-white rounded-xl font-bold hover:bg-red-700">ลบ</button>
+                                    <button onClick={() => setShowConfirmPopup(null)} className="flex-1 py-3 text-slate-500 hover:bg-slate-100 rounded-xl font-bold transition-colors">ยกเลิก</button>
+                                    <button onClick={handleDeleteConfirm} className="flex-1 py-3 bg-red-600 text-white rounded-xl font-bold hover:bg-red-700 shadow-md transition-colors">ลบรายการ</button>
                                 </div>
                             </div>
                         </div>
                     )}
 
+                    {/* Edit Name Modal */}
                     {showEditPopup && (
-                        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-[60]">
-                            <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl animate-fade-in relative">
-                                <button onClick={() => setShowEditPopup(null)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 z-10"><Icons.Cross size={24}/></button>
+                        <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in">
+                            <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl relative border-t-4 border-indigo-500">
+                                <button onClick={() => setShowEditPopup(null)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"><Icons.Cross size={24}/></button>
                                 <h2 className="font-bold text-xl mb-4 text-indigo-800 flex items-center gap-2"><Icons.Edit size={24}/> แก้ไขชื่อ</h2>
                                 <input 
                                     ref={editInputRef}
